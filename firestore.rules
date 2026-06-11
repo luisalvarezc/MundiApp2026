@@ -1,0 +1,150 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && 
+             request.auth.token.email == "luisalvarezc@gmail.com" && 
+             request.auth.token.email_verified == true;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Entity validator checks
+    function isValidUser(data) {
+      return data.keys().hasAll(['id', 'nickname', 'email', 'favoriteTeam', 'avatarColor', 'points', 'exactHits', 'outcomeHits', 'subscribedTeams', 'groupName']) &&
+             data.keys().size() == 10 &&
+             data.id is string && data.id.size() <= 128 &&
+             data.nickname is string && data.nickname.size() <= 40 &&
+             data.email is string && data.email.size() <= 100 &&
+             data.favoriteTeam is string && data.favoriteTeam.size() <= 40 &&
+             data.avatarColor is string && data.avatarColor.size() <= 30 &&
+             data.points is int && data.points >= -100 && data.points <= 1000 &&
+             data.exactHits is int && data.exactHits >= 0 && data.exactHits <= 100 &&
+             data.outcomeHits is int && data.outcomeHits >= 0 && data.outcomeHits <= 100 &&
+             data.subscribedTeams is list && data.subscribedTeams.size() <= 15 &&
+             data.groupName is string && data.groupName.size() <= 40 &&
+             data.groupName in ['Familia', 'Compas', 'Cretas'];
+    }
+
+    function isValidMatch(data) {
+      return data.keys().hasAll(['id', 'homeTeam', 'awayTeam', 'group', 'dateTime', 'homeScore', 'awayScore', 'status']) &&
+             data.keys().size() == 8 &&
+             data.id is string && data.id.size() <= 100 &&
+             data.homeTeam is string && data.homeTeam.size() <= 40 &&
+             data.awayTeam is string && data.awayTeam.size() <= 40 &&
+             data.group is string && data.group.size() <= 30 &&
+             data.dateTime is string && data.dateTime.size() <= 50 &&
+             data.homeScore is int && data.homeScore >= -1 && data.homeScore <= 50 &&
+             data.awayScore is int && data.awayScore >= -1 && data.awayScore <= 50 &&
+             data.status in ['scheduled', 'live', 'finished'];
+    }
+
+    function isValidPrediction(data) {
+      return data.keys().hasAll(['id', 'userId', 'matchId', 'homePredict', 'awayPredict', 'pointsEarned', 'calculated']) &&
+             data.keys().size() == 7 &&
+             data.id is string && data.id.size() <= 100 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.matchId is string && data.matchId.size() <= 100 &&
+             data.homePredict is int && data.homePredict >= -1 && data.homePredict <= 50 &&
+             data.awayPredict is int && data.awayPredict >= -1 && data.awayPredict <= 50 &&
+             data.pointsEarned is int && data.pointsEarned >= 0 && data.pointsEarned <= 3 &&
+             data.calculated is bool;
+    }
+
+    function isValidMessage(data) {
+      return data.keys().hasAll(['id', 'userId', 'nickname', 'avatarColor', 'text', 'timestamp']) &&
+             data.keys().size() <= 7 &&
+             data.id is string && data.id.size() <= 100 &&
+             data.userId is string && data.userId.size() <= 128 &&
+             data.nickname is string && data.nickname.size() <= 40 &&
+             data.avatarColor is string && data.avatarColor.size() <= 30 &&
+             data.text is string && data.text.size() <= 450 &&
+             data.timestamp is string && data.timestamp.size() <= 50 &&
+             (!('matchId' in data) || (data.matchId is string && data.matchId.size() <= 100));
+    }
+
+    // Route rule bindings
+
+    // Matches collection
+    match /matches/{matchId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin() && isValidId(matchId) && (request.method == "delete" || isValidMatch(incoming()));
+    }
+
+    // Users collection (leaderboard & profile settings)
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isVerified() && request.auth.uid == userId && isValidId(userId) && isValidUser(incoming()) && (
+        incoming().points == 0 &&
+        incoming().exactHits == 0 &&
+        incoming().outcomeHits == 0 &&
+        incoming().email == request.auth.token.email
+      );
+      allow update: if isVerified() && request.auth.uid == userId && isValidId(userId) && isValidUser(incoming()) && (
+        incoming().diff(existing()).affectedKeys().hasOnly(['nickname', 'favoriteTeam', 'avatarColor', 'subscribedTeams', 'groupName'])
+      ) || isAdmin();
+    }
+
+    // Predictions collection
+    match /predictions/{predictionId} {
+      allow read: if isSignedIn();
+      allow create: if isVerified() && isValidId(predictionId) && isValidPrediction(incoming()) && (
+        (
+          incoming().userId == request.auth.uid &&
+          predictionId == request.auth.uid + "_" + incoming().matchId &&
+          incoming().pointsEarned == 0 &&
+          incoming().calculated == false &&
+          exists(/databases/$(database)/documents/matches/$(incoming().matchId)) &&
+          get(/databases/$(database)/documents/matches/$(incoming().matchId)).data.status == "scheduled"
+        ) || isAdmin()
+      );
+      allow update: if isVerified() && isValidId(predictionId) && isValidPrediction(incoming()) && (
+        (
+          incoming().userId == request.auth.uid &&
+          existing().userId == request.auth.uid &&
+          incoming().userId == existing().userId &&
+          get(/databases/$(database)/documents/matches/$(existing().matchId)).data.status == "scheduled" &&
+          incoming().pointsEarned == existing().pointsEarned &&
+          incoming().calculated == existing().calculated &&
+          incoming().diff(existing()).affectedKeys().hasOnly(['homePredict', 'awayPredict'])
+        ) || isAdmin()
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Messages collection (chat room)
+    match /messages/{messageId} {
+      allow read: if isSignedIn();
+      allow create: if isVerified() && isValidId(messageId) && isValidMessage(incoming()) && (
+        incoming().userId == request.auth.uid || isAdmin()
+      );
+      allow update, delete: if isAdmin();
+    }
+
+  }
+}

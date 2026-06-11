@@ -1,0 +1,86 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Familiar tournament participant details",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "nickname": { "type": "string" },
+        "email": { "type": "string" },
+        "favoriteTeam": { "type": "string" },
+        "avatarColor": { "type": "string" },
+        "points": { "type": "integer" },
+        "exactHits": { "type": "integer" },
+        "outcomeHits": { "type": "integer" },
+        "subscribedTeams": { "type": "array" },
+        "groupName": { "type": "string", "enum": ["Familia", "Compas", "Cretas"] }
+      },
+      "required": ["id", "nickname", "email", "favoriteTeam", "avatarColor", "points", "exactHits", "outcomeHits", "groupName"]
+    },
+    "Match": {
+      "title": "Match",
+      "description": "Official tournament match schedule and scores",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "homeTeam": { "type": "string" },
+        "awayTeam": { "type": "string" },
+        "homeScore": { "type": "integer" },
+        "awayScore": { "type": "integer" },
+        "status": { "type": "string", "enum": ["scheduled", "live", "finished"] },
+        "group": { "type": "string" },
+        "dateTime": { "type": "string" },
+        "stadium": { "type": "string" }
+      },
+      "required": ["id", "homeTeam", "awayTeam", "homeScore", "awayScore", "status", "group", "dateTime"]
+    },
+    "Prediction": {
+      "title": "Prediction",
+      "description": "Participant match score forecasts",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "matchId": { "type": "string" },
+        "homePredict": { "type": "integer" },
+        "awayPredict": { "type": "integer" },
+        "pointsEarned": { "type": "integer" },
+        "calculated": { "type": "boolean" }
+      },
+      "required": ["id", "userId", "matchId", "homePredict", "awayPredict", "pointsEarned", "calculated"]
+    },
+    "ChatMessage": {
+      "title": "ChatMessage",
+      "description": "Foro chat message",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "nickname": { "type": "string" },
+        "avatarColor": { "type": "string" },
+        "text": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "userId", "nickname", "avatarColor", "text", "timestamp"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "A participant collection profile"
+    },
+    "matches/{matchId}": {
+      "schema": "Match",
+      "description": "Tournament official matches schedule and scorelines"
+    },
+    "predictions/{predictionId}": {
+      "schema": "Prediction",
+      "description": "Family predictions mapping"
+    },
+    "messages/{messageId}": {
+      "schema": "ChatMessage",
+      "description": "Chat messages stream collection in foro"
+    }
+  }
+}

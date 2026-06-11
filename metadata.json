@@ -1,0 +1,6 @@
+{
+  "name": "Quiniela Familiar Mundial 2026",
+  "description": "Quiniela digital para el Mundial de Fútbol 2026 con predicciones, tabla de clasificación en tiempo real, chat comunitario y alertas.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
